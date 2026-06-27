@@ -9,6 +9,23 @@ const MAX_PIXELS = 8_294_400
 export type SizeTier = '1K' | '2K' | '4K'
 type PresetRatio = '1:1' | '3:2' | '2:3' | '16:9' | '9:16' | '4:3' | '3:4' | '21:9'
 
+export const DOCUMENTED_IMAGE_ASPECT_RATIOS = [
+  '1:1',
+  '16:9',
+  '9:16',
+  '4:3',
+  '3:4',
+  '3:2',
+  '2:3',
+  '5:4',
+  '4:5',
+  '21:9',
+] as const
+
+function normalizeImageParam(value: string) {
+  return value.toLowerCase().trim().replace(/ /g, '').replace(/×/g, 'x').replace(/\*/g, 'x')
+}
+
 function roundToMultiple(value: number, multiple: number) {
   return Math.max(multiple, Math.round(value / multiple) * multiple)
 }
@@ -148,6 +165,36 @@ export function formatImageRatio(width: number, height: number) {
     .sort((a, b) => a.score - b.score)[0]
 
   return friendlyNearest && friendlyNearest.delta <= 0.04 ? `≈${friendlyNearest.label}` : simplified
+}
+
+export function normalizeDocumentedImageAspectRatio(value: string) {
+  const trimmed = normalizeImageParam(value)
+  if (!trimmed) return ''
+  if (trimmed === 'auto') return 'auto'
+  if ((DOCUMENTED_IMAGE_ASPECT_RATIOS as readonly string[]).includes(trimmed)) return trimmed
+
+  const parsed = parseRatio(trimmed)
+  if (!parsed) return ''
+
+  const targetRatio = parsed.width / parsed.height
+  let bestRatio = ''
+  let bestDelta = Number.POSITIVE_INFINITY
+
+  for (const ratio of DOCUMENTED_IMAGE_ASPECT_RATIOS) {
+    const [ratioWidth, ratioHeight] = ratio.split(':').map(Number)
+    if (!Number.isFinite(ratioWidth) || !Number.isFinite(ratioHeight) || ratioWidth <= 0 || ratioHeight <= 0) {
+      continue
+    }
+
+    const current = ratioWidth / ratioHeight
+    const delta = Math.abs(targetRatio - current) / current
+    if (delta < bestDelta) {
+      bestDelta = delta
+      bestRatio = ratio
+    }
+  }
+
+  return bestRatio
 }
 
 /**

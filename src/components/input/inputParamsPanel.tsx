@@ -103,12 +103,12 @@ export default function InputParamsPanel({
         onTouchCancel={sizeHint.hide}
         onClick={sizeHint.show}
       >
-        <span className="text-gray-400 dark:text-gray-500 ml-1">尺寸</span>
+        <span className="text-gray-400 dark:text-gray-500 ml-1">比例</span>
         <button
           type="button"
           onClick={() => { dismissAllTooltips(); onOpenSizePicker() }}
           className="px-3 py-1.5 rounded-xl border border-gray-200/60 dark:border-white/[0.08] bg-white/50 dark:bg-white/[0.03] hover:bg-white dark:hover:bg-white/[0.06] focus:outline-none text-xs text-left transition-all duration-200 shadow-sm font-mono"
-          title="选择尺寸"
+          title="选择图像比例"
         >
           {displaySize}
         </button>

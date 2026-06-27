@@ -50,4 +50,16 @@ describe('parameter compatibility', () => {
     expect(normalizeParamsForSettings({ ...DEFAULT_PARAMS, size: 'auto' }, settings).size).toBe('1360x1024')
     expect(normalizeParamsForSettings({ ...DEFAULT_PARAMS, size: 'auto' }, settings, { hasInputImages: true }).size).toBe('auto')
   })
+
+  it('normalizes pixel sizes to documented aspect ratios', () => {
+    const openAIProfile = createDefaultOpenAIProfile({ apiKey: 'test-key', streamImages: false })
+    const settings = normalizeSettings({
+      ...DEFAULT_SETTINGS,
+      profiles: [openAIProfile],
+      activeProfileId: openAIProfile.id,
+    })
+
+    expect(normalizeParamsForSettings({ ...DEFAULT_PARAMS, size: '1664x944' }, settings).size).toBe('16:9')
+    expect(normalizeParamsForSettings({ ...DEFAULT_PARAMS, size: '1024x1792' }, settings).size).toBe('9:16')
+  })
 })

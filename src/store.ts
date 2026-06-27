@@ -4154,6 +4154,11 @@ async function executeAgentRound(
         break
       }
 
+      if (continueFunctionCalls.length === 0) {
+        accumulatedOutputItems = accumulatedOutputItemsWithFunctionOutputs
+        break
+      }
+
       // Build continuation input with function call outputs and available refs
       const latestConversation = useStore.getState().agentConversations.find((item) => item.id === conversationId)
       const latestRound = latestConversation?.rounds.find((item) => item.id === roundId)

@@ -5,7 +5,7 @@ import { DEFAULT_PARAMS, type TaskRecord } from '../types'
 import { getActiveApiProfile, getAgentImageApiProfile, normalizeSettings } from '../lib/apiProfiles'
 import { DEFAULT_FAL_IMAGE_SIZE, getChangedParams, getOutputImageLimitForSettings, normalizeParamsForSettings } from '../lib/paramCompatibility'
 import { getAtImageQuery, getImageMentionLabel, getPromptIndexFromVisibleIndex, getPromptMentionParts, getSelectedImageMentionLabel, getSelectedTextMentionLabel, imageMentionMatches, insertImageMentionAtVisibleRange, insertTextMentionAtVisibleRange, isCursorInSelectedImageMention, stripImageMentionMarkers } from '../lib/promptImageMentions'
-import { normalizeImageSize } from '../lib/size'
+import { normalizeDocumentedImageAspectRatio } from '../lib/size'
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { getSafeBoundingClientRect } from '../lib/domRect'
 import { collectAgentRoundOutputImageSlots } from '../lib/agentImageReferences'
@@ -758,7 +758,7 @@ export default function InputBar() {
     : `OpenAI 最大请求数量为 ${outputImageLimit}`
   const displaySize = isFalTextToImage && params.size === 'auto'
     ? DEFAULT_FAL_IMAGE_SIZE
-    : normalizeImageSize(params.size) || DEFAULT_PARAMS.size
+    : normalizeDocumentedImageAspectRatio(params.size) || DEFAULT_PARAMS.size
 
   const qualityOptions = isFalProvider
     ? [
