@@ -4,10 +4,12 @@ import {
   DEFAULT_FAL_MODEL,
   DEFAULT_IMAGES_MODEL,
   DEFAULT_OPENAI_PROFILE_ID,
+  DEFAULT_RESPONSES_MODEL,
   DEFAULT_SETTINGS,
   createDefaultOpenAIProfile,
   createDefaultFalProfile,
   getActiveApiProfile,
+  getAgentImageApiProfile,
   findEquivalentApiProfile,
   importCustomProviderDefinitionFromJson,
   importCustomProviderSettingsFromJson,
@@ -637,6 +639,35 @@ describe('custom providers', () => {
     const activeProfile = getActiveApiProfile({ ...settings, apiMode: 'responses', streamImages: true })
     expect(activeProfile.apiMode).toBe('images')
     expect(activeProfile.streamImages).toBe(false)
+  })
+
+  it('derives an Images API profile for default Agent image tools', () => {
+    const settings = normalizeSettings({
+      profiles: [
+        createDefaultOpenAIProfile({
+          id: 'text-profile',
+          name: 'Text Profile',
+          baseUrl: 'https://llmhub.ltd/v1',
+          apiKey: 'test-key',
+          model: DEFAULT_RESPONSES_MODEL,
+          apiMode: 'responses',
+          streamImages: true,
+        }),
+      ],
+      activeProfileId: 'text-profile',
+      agentApiConfigMode: 'off',
+    })
+
+    const imageProfile = getAgentImageApiProfile(settings)
+
+    expect(imageProfile).toMatchObject({
+      provider: 'openai',
+      baseUrl: 'https://llmhub.ltd/v1',
+      apiKey: 'test-key',
+      model: DEFAULT_IMAGES_MODEL,
+      apiMode: 'images',
+      streamImages: false,
+    })
   })
 
   it('keeps non-OpenAI providers in Images API mode when switching providers', () => {

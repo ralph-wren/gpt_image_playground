@@ -580,6 +580,21 @@ export function getAgentTextApiProfile(settings: Partial<AppSettings> | unknown)
 
 export function getAgentImageApiProfile(settings: Partial<AppSettings> | unknown): ApiProfile | null {
   const normalized = normalizeSettings(settings)
+  if (normalized.agentApiConfigMode === 'off') {
+    const textProfile = getAgentTextApiProfile(normalized)
+    if (!textProfile) return null
+    if (textProfile.provider === 'openai' && textProfile.apiMode === 'responses') {
+      return {
+        ...textProfile,
+        id: `${textProfile.id}-agent-image`,
+        name: `${textProfile.name} · Images`,
+        model: DEFAULT_IMAGES_MODEL,
+        apiMode: 'images',
+        streamImages: false,
+      }
+    }
+    return textProfile
+  }
   if (normalized.agentApiConfigMode !== 'hybrid') return getAgentTextApiProfile(normalized)
   return normalized.profiles.find((profile) => profile.id === normalized.agentImageProfileId) ?? null
 }
