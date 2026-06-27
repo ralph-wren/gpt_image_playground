@@ -107,7 +107,8 @@ function normalizeProviderOrder(value: unknown, customProviders: CustomProviderD
 }
 
 function normalizeAgentApiConfigMode(value: unknown): AgentApiConfigMode {
-  return value === 'native' || value === 'hybrid' ? value : 'off'
+  const mode = value === 'native' || value === 'hybrid' ? value : 'off'
+  return isDefaultConfigOnlyEnabled() && mode === 'native' ? 'off' : mode
 }
 
 export function isAgentTextApiProfile(profile: ApiProfile): boolean {
