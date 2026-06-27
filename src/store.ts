@@ -3803,6 +3803,8 @@ async function executeAgentRound(
       }
     }
 
+    const useNativeImageTool = requestSettings.agentApiConfigMode === 'native'
+
     // Helper: execute a generate_image_batch function call concurrently
     const executeBatchFunctionCall = async (functionCallItem: ResponsesOutputItem): Promise<string> => {
       const callId = functionCallItem.call_id ?? ''
@@ -3819,7 +3821,7 @@ async function executeAgentRound(
         const referenceIds = uniqueIds(extractAgentReferenceIds(item.prompt))
         const references = await resolveReferenceImages(referenceIds)
         const batchToolCallId = genId()
-        const taskParams = requestSettings.agentApiConfigMode === 'hybrid'
+        const taskParams = !useNativeImageTool
           ? {
               ...normalizeParamsForSettings(params, imageRequestSettings, { hasInputImages: references.dataUrls.length > 0 }),
               n: 1,
@@ -3838,7 +3840,7 @@ async function executeAgentRound(
       // Fire all batch items concurrently after all cards are visible.
       const batchPromises = batchExecutionItems.map(async ({ item, batchToolCallId, references, referenceIds, taskParams }) => {
 
-        const batchResult = requestSettings.agentApiConfigMode === 'hybrid'
+        const batchResult = !useNativeImageTool
           ? {
               batchItemId: item.id,
               ...(await callHybridImageApiSingle({
@@ -4185,7 +4187,7 @@ async function executeAgentRound(
     markAgentRoundTasksFailed(
       conversationId,
       roundId,
-      requestSettings.agentApiConfigMode === 'hybrid' ? '自定义图像生成工具未返回图片' : '内置 image_generation 工具未返回图片',
+      !useNativeImageTool ? '自定义图像生成工具未返回图片' : '内置 image_generation 工具未返回图片',
       undefined,
       (task) => Boolean(task.agentToolCallId && !task.agentBatchCallId),
     )

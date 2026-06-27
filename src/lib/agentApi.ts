@@ -61,12 +61,11 @@ function createAgentInstructions(settings: AppSettings) {
   const maxToolRounds = Number.isFinite(settings.agentMaxToolRounds)
     ? Math.max(1, Math.trunc(settings.agentMaxToolRounds))
     : DEFAULT_AGENT_MAX_TOOL_ROUNDS
-  const imageToolInstruction = settings.agentApiConfigMode === 'hybrid'
-    ? 'Use generate_image for single-image requests and generate_image_batch for concurrent multi-image requests. The built-in image_generation tool is not available in this session.'
-    : 'Use image_generation for single-image requests and generate_image_batch for concurrent multi-image requests.'
-  const imageInstructions = settings.agentApiConfigMode === 'hybrid'
-    ? AGENT_IMAGE_INSTRUCTIONS.replace(/image_generation/g, 'generate_image')
-    : AGENT_IMAGE_INSTRUCTIONS
+  const useNativeImageTool = settings.agentApiConfigMode === 'native'
+  const imageToolInstruction = useNativeImageTool
+    ? 'Use image_generation for single-image requests and generate_image_batch for concurrent multi-image requests.'
+    : 'Use generate_image for single-image requests and generate_image_batch for concurrent multi-image requests. The built-in image_generation tool is not available in this session.'
+  const imageInstructions = useNativeImageTool ? AGENT_IMAGE_INSTRUCTIONS : AGENT_IMAGE_INSTRUCTIONS.replace(/image_generation/g, 'generate_image')
   const instructions = [
     imageInstructions,
     '',
@@ -157,12 +156,13 @@ function createGenerateImageFunctionTool() {
 }
 
 function createAgentTools(params: TaskParams, profile: ApiProfile, settings: AppSettings, maskDataUrl?: string): Array<Record<string, unknown>> {
-  const tools: Array<Record<string, unknown>> = settings.agentApiConfigMode === 'hybrid'
-    ? [createGenerateImageFunctionTool()]
-    : [createImageTool(params, profile, maskDataUrl)]
-  const singleImageToolInstruction = settings.agentApiConfigMode === 'hybrid'
-    ? 'For single images or prerequisite/base images, use the generate_image tool instead.'
-    : 'For single images or prerequisite/base images, use the built-in image_generation tool instead.'
+  const useNativeImageTool = settings.agentApiConfigMode === 'native'
+  const tools: Array<Record<string, unknown>> = useNativeImageTool
+    ? [createImageTool(params, profile, maskDataUrl)]
+    : [createGenerateImageFunctionTool()]
+  const singleImageToolInstruction = useNativeImageTool
+    ? 'For single images or prerequisite/base images, use the built-in image_generation tool instead.'
+    : 'For single images or prerequisite/base images, use the generate_image tool instead.'
 
   // generate_image_batch: custom function tool for concurrent multi-image generation
   tools.push({
