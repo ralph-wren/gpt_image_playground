@@ -3803,7 +3803,7 @@ async function executeAgentRound(
       }
     }
 
-    const useNativeImageTool = requestSettings.agentApiConfigMode === 'native'
+    const useNativeImageTool = requestSettings.agentApiConfigMode === 'native' && imageProfile.apiMode === 'responses'
 
     // Helper: execute a generate_image_batch function call concurrently
     const executeBatchFunctionCall = async (functionCallItem: ResponsesOutputItem): Promise<string> => {
