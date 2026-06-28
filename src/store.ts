@@ -1839,6 +1839,7 @@ export function getTaskApiProfile(settings: AppSettings, task: TaskRecord): ApiP
 
 function createSettingsForApiProfile(settings: AppSettings, profile: ApiProfile): AppSettings {
   const normalized = normalizeSettings(settings)
+  const hasProfile = normalized.profiles.some((item) => item.id === profile.id)
   return normalizeSettings({
     ...normalized,
     baseUrl: profile.baseUrl,
@@ -1848,7 +1849,9 @@ function createSettingsForApiProfile(settings: AppSettings, profile: ApiProfile)
     apiMode: profile.apiMode,
     codexCli: profile.codexCli,
     apiProxy: profile.apiProxy,
-    profiles: normalized.profiles.map((item) => item.id === profile.id ? profile : item),
+    profiles: hasProfile
+      ? normalized.profiles.map((item) => item.id === profile.id ? profile : item)
+      : [...normalized.profiles, profile],
     activeProfileId: profile.id,
   })
 }
