@@ -10,6 +10,8 @@ import {
   createDefaultFalProfile,
   getActiveApiProfile,
   getAgentImageApiProfile,
+  getAgentTextApiProfile,
+  getImageApiProfile,
   findEquivalentApiProfile,
   importCustomProviderDefinitionFromJson,
   importCustomProviderSettingsFromJson,
@@ -664,6 +666,48 @@ describe('custom providers', () => {
       provider: 'openai',
       baseUrl: 'https://llmhub.ltd/v1',
       apiKey: 'test-key',
+      model: DEFAULT_IMAGES_MODEL,
+      apiMode: 'images',
+      streamImages: false,
+    })
+  })
+
+  it('auto routes one OpenAI profile to gallery images and Agent text/image calls', () => {
+    const settings = normalizeSettings({
+      profiles: [
+        createDefaultOpenAIProfile({
+          id: 'llmhub-profile',
+          name: 'LLMHub',
+          baseUrl: 'https://llmhub.ltd/v1',
+          apiKey: 'test-key',
+          model: DEFAULT_RESPONSES_MODEL,
+          apiMode: 'responses',
+          streamImages: true,
+        }),
+      ],
+      activeProfileId: 'llmhub-profile',
+      agentApiConfigMode: 'native',
+    })
+
+    const galleryProfile = getImageApiProfile(settings)
+    const agentTextProfile = getAgentTextApiProfile(settings)
+    const agentImageProfile = getAgentImageApiProfile(settings)
+
+    expect(settings.agentApiConfigMode).toBe('off')
+    expect(galleryProfile).toMatchObject({
+      id: 'llmhub-profile',
+      model: DEFAULT_IMAGES_MODEL,
+      apiMode: 'images',
+      streamImages: false,
+    })
+    expect(agentTextProfile).toMatchObject({
+      id: 'llmhub-profile',
+      model: DEFAULT_RESPONSES_MODEL,
+      apiMode: 'responses',
+      streamImages: true,
+    })
+    expect(agentImageProfile).toMatchObject({
+      id: 'llmhub-profile',
       model: DEFAULT_IMAGES_MODEL,
       apiMode: 'images',
       streamImages: false,

@@ -107,8 +107,8 @@ function normalizeProviderOrder(value: unknown, customProviders: CustomProviderD
 }
 
 function normalizeAgentApiConfigMode(value: unknown): AgentApiConfigMode {
-  const mode = value === 'native' || value === 'hybrid' ? value : 'off'
-  return isDefaultConfigOnlyEnabled() && mode === 'native' ? 'off' : mode
+  void value
+  return 'off'
 }
 
 export function isAgentTextApiProfile(profile: ApiProfile): boolean {
@@ -575,29 +575,50 @@ export function normalizeSettings(input: Partial<AppSettings> | unknown): AppSet
 
 export function getAgentTextApiProfile(settings: Partial<AppSettings> | unknown): ApiProfile | null {
   const normalized = normalizeSettings(settings)
-  if (normalized.agentApiConfigMode === 'off') return getActiveApiProfile(normalized)
+  if (normalized.agentApiConfigMode === 'off') return getAgentTextApiProfileFromActive(normalized)
   return normalized.profiles.find((profile) => profile.id === normalized.agentTextProfileId) ?? null
 }
 
 export function getAgentImageApiProfile(settings: Partial<AppSettings> | unknown): ApiProfile | null {
   const normalized = normalizeSettings(settings)
   if (normalized.agentApiConfigMode === 'off') {
-    const textProfile = getAgentTextApiProfile(normalized)
-    if (!textProfile) return null
-    if (textProfile.provider === 'openai' && textProfile.apiMode === 'responses') {
-      return {
-        ...textProfile,
-        id: `${textProfile.id}-agent-image`,
-        name: `${textProfile.name} · Images`,
-        model: DEFAULT_IMAGES_MODEL,
-        apiMode: 'images',
-        streamImages: false,
-      }
-    }
-    return textProfile
+    return getImageApiProfile(normalized)
   }
   if (normalized.agentApiConfigMode !== 'hybrid') return getAgentTextApiProfile(normalized)
   return normalized.profiles.find((profile) => profile.id === normalized.agentImageProfileId) ?? null
+}
+
+export function getImageApiProfile(settings: Partial<AppSettings> | unknown): ApiProfile {
+  return toImageApiProfile(getActiveApiProfile(settings))
+}
+
+export function toImageApiProfile(profile: ApiProfile): ApiProfile {
+  if (profile.provider !== 'openai') return profile
+
+  return {
+    ...profile,
+    name: `${profile.name} · Images`,
+    model: DEFAULT_IMAGES_MODEL,
+    apiMode: 'images',
+    streamImages: false,
+  }
+}
+
+function getAgentTextApiProfileFromActive(settings: Partial<AppSettings> | unknown): ApiProfile {
+  const activeProfile = getActiveApiProfile(settings)
+  if (activeProfile.provider !== 'openai') return activeProfile
+
+  const textModel = activeProfile.model.trim() && activeProfile.model !== DEFAULT_IMAGES_MODEL
+    ? activeProfile.model
+    : DEFAULT_RESPONSES_MODEL
+
+  return {
+    ...activeProfile,
+    name: `${activeProfile.name} · Agent`,
+    model: textModel,
+    apiMode: 'responses',
+    streamImages: true,
+  }
 }
 
 export function getCustomProviderDefinition(settings: Partial<AppSettings> | unknown, provider: ApiProvider): CustomProviderDefinition | null {

@@ -17,7 +17,7 @@ import type {
   ResponsesOutputItem,
 } from './types'
 import { DEFAULT_AGENT_MAX_TOOL_ROUNDS, DEFAULT_PARAMS } from './types'
-import { DEFAULT_SETTINGS, getActiveApiProfile, getAgentImageApiProfile, getAgentTextApiProfile, getCustomProviderDefinition, mergeImportedSettings, normalizeSettings, validateApiProfile } from './lib/apiProfiles'
+import { DEFAULT_SETTINGS, getActiveApiProfile, getAgentImageApiProfile, getAgentTextApiProfile, getCustomProviderDefinition, getImageApiProfile, mergeImportedSettings, normalizeSettings, toImageApiProfile, validateApiProfile } from './lib/apiProfiles'
 import { dismissAllTooltips } from './lib/tooltipDismiss'
 import { remapImageMentionsForOrder, replaceImageMentionsForApi } from './lib/promptImageMentions'
 import {
@@ -1186,19 +1186,6 @@ export const useStore = create<AppState>()(
           return
         }
 
-        if (settings.agentApiConfigMode === 'off' && activeProfile.provider === 'openai' && activeProfile.apiMode !== 'responses') {
-          state.setConfirmDialog({
-            title: '需要 Responses API 配置',
-            message: `当前配置「${activeProfile.name}」使用的是 Images API，仅支持生成图片，无 Agent 模式需要的对话能力。\n\n请前往 API 配置页，将当前配置调整为 Responses API，或切换/新建一个支持 Responses API 的配置。`,
-            confirmText: '去设置',
-            cancelText: '取消',
-            action: () => {
-              useStore.getState().setShowSettings(true, 'api')
-            },
-          })
-          return
-        }
-
         if (settings.agentApiConfigMode !== 'off') {
           state.setConfirmDialog({
             title: 'Agent API 配置不完整',
@@ -2328,7 +2315,7 @@ export async function submitTask(options: { allowFullMask?: boolean; useCurrentA
     useStore.getState()
 
   const normalizedSettings = normalizeSettings(settings)
-  let activeProfile = getActiveApiProfile(settings)
+  let activeProfile = getImageApiProfile(settings)
   let requestSettings = createSettingsForApiProfile(normalizedSettings, activeProfile)
   if (normalizedSettings.reuseTaskApiProfileTemporarily && (reusedTaskApiProfileId || reusedTaskApiProfileMissing)) {
     const reusedProfile = getReusedTaskApiProfile(normalizedSettings, reusedTaskApiProfileId)
@@ -2348,8 +2335,8 @@ export async function submitTask(options: { allowFullMask?: boolean; useCurrentA
         return
       }
     } else {
-      activeProfile = reusedProfile
-      requestSettings = createSettingsForApiProfile(normalizedSettings, reusedProfile)
+      activeProfile = toImageApiProfile(reusedProfile)
+      requestSettings = createSettingsForApiProfile(normalizedSettings, activeProfile)
     }
   }
 
@@ -4317,7 +4304,7 @@ async function executeTask(taskId: string) {
     })
     return
   }
-  const activeProfile = taskProfile ?? getActiveApiProfile(settings)
+  const activeProfile = toImageApiProfile(taskProfile ?? getActiveApiProfile(settings))
   const requestSettings = createSettingsForApiProfile(settings, activeProfile)
   const taskProvider = task.apiProvider ?? activeProfile.provider
   let falRequestInfo: { requestId: string; endpoint: string } | null = task.falRequestId && task.falEndpoint
@@ -4716,8 +4703,9 @@ export async function deleteFavoriteCollection(collectionId: string, deleteTasks
 /** 重试失败的任务：创建新任务并执行 */
 export async function retryTask(task: TaskRecord) {
   const { settings } = useStore.getState()
-  const activeProfile = getActiveApiProfile(settings)
-  const normalizedParams = normalizeParamsForSettings(task.params, settings, { hasInputImages: task.inputImageIds.length > 0 })
+  const activeProfile = getImageApiProfile(settings)
+  const requestSettings = createSettingsForApiProfile(normalizeSettings(settings), activeProfile)
+  const normalizedParams = normalizeParamsForSettings(task.params, requestSettings, { hasInputImages: task.inputImageIds.length > 0 })
   const shouldUseTransparentOutput = normalizedParams.output_format === 'png' && normalizedParams.transparent_output
   const taskParams = shouldUseTransparentOutput
     ? getTransparentRequestParams(normalizedParams)

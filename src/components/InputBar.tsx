@@ -2,7 +2,7 @@ import { useRef, useEffect, useCallback, useState, useMemo, useLayoutEffect } fr
 import { createPortal } from 'react-dom'
 import { ALL_FAVORITES_COLLECTION_ID, deleteFavoriteCollection, getTaskFavoriteCollectionIds, useStore, submitTask, submitAgentMessage, stopAgentResponse, addImageFromFile, createInputImageFromFile, deleteImageIfUnreferenced, removeMultipleTasks, getCachedImage, ensureImageCached, getActiveAgentRounds, taskMatchesFilterStatus, taskMatchesSearchQuery } from '../store'
 import { DEFAULT_PARAMS, type TaskRecord } from '../types'
-import { getActiveApiProfile, getAgentImageApiProfile, normalizeSettings } from '../lib/apiProfiles'
+import { getActiveApiProfile, getAgentImageApiProfile, getImageApiProfile, normalizeSettings } from '../lib/apiProfiles'
 import { DEFAULT_FAL_IMAGE_SIZE, getChangedParams, getOutputImageLimitForSettings, normalizeParamsForSettings } from '../lib/paramCompatibility'
 import { getAtImageQuery, getImageMentionLabel, getPromptIndexFromVisibleIndex, getPromptMentionParts, getSelectedImageMentionLabel, getSelectedTextMentionLabel, imageMentionMatches, insertImageMentionAtVisibleRange, insertTextMentionAtVisibleRange, isCursorInSelectedImageMention, stripImageMentionMarkers } from '../lib/promptImageMentions'
 import { normalizeDocumentedImageAspectRatio } from '../lib/size'
@@ -694,7 +694,7 @@ export default function InputBar() {
   const currentActiveProfile = useMemo(() => (
     appMode === 'agent'
       ? getAgentImageApiProfile(settings) ?? settingsActiveProfile
-      : settingsActiveProfile
+      : getImageApiProfile(settings)
   ), [appMode, settings, settingsActiveProfile])
   const activeProfile = useMemo(() => (
     appMode !== 'agent' && settings.reuseTaskApiProfileTemporarily && reusedTaskApiProfileId
@@ -706,10 +706,19 @@ export default function InputBar() {
     : null
   const activeAgentIsRunning = Boolean(activeAgentConversation?.rounds.some((round) => round.status === 'running'))
   const effectiveSettings = useMemo(() => (
-    activeProfile.id === settingsActiveProfile.id
+    activeProfile.id === settingsActiveProfile.id &&
+    activeProfile.apiMode === settingsActiveProfile.apiMode &&
+    activeProfile.model === settingsActiveProfile.model &&
+    activeProfile.streamImages === settingsActiveProfile.streamImages
       ? settings
-      : normalizeSettings({ ...settings, activeProfileId: activeProfile.id })
-  ), [activeProfile.id, settingsActiveProfile.id, settings])
+      : normalizeSettings({
+        ...settings,
+        activeProfileId: activeProfile.id,
+        apiMode: activeProfile.apiMode,
+        model: activeProfile.model,
+        streamImages: activeProfile.streamImages,
+      })
+  ), [activeProfile, settingsActiveProfile, settings])
   const hasSubmitApiConfig = Boolean(activeProfile.apiKey)
   const canSubmit = Boolean(prompt.trim() && hasSubmitApiConfig && !activeAgentIsRunning)
   const submitButtonAriaLabel = activeAgentIsRunning

@@ -16,7 +16,6 @@ import {
   getActiveApiProfile,
   importCustomProviderSettingsFromJson,
   isDefaultConfigOnlyEnabled,
-  isAgentTextApiProfile,
   isOpenAICompatibleProvider,
   mergeImportedSettings,
   normalizeAgentMaxToolRounds,
@@ -27,7 +26,7 @@ import {
 } from '../lib/apiProfiles'
 import { copyTextToClipboard, getClipboardFailureMessage } from '../lib/clipboard'
 import { requestBrowserNotificationPermission, type BrowserNotificationPermissionResult } from '../lib/browserNotification'
-import { DEFAULT_AGENT_MAX_TOOL_ROUNDS, DEFAULT_STREAM_PARTIAL_IMAGES, type AgentApiConfigMode, type ApiProfile, type AppSettings, type CustomProviderDefinition, type ZipDownloadRoute } from '../types'
+import { DEFAULT_AGENT_MAX_TOOL_ROUNDS, DEFAULT_STREAM_PARTIAL_IMAGES, type ApiProfile, type AppSettings, type CustomProviderDefinition, type ZipDownloadRoute } from '../types'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { DEFAULT_DROPDOWN_MAX_HEIGHT, getDropdownMaxHeight } from '../lib/dropdown'
@@ -400,9 +399,6 @@ export default function SettingsModal() {
     })
   ]
 
-  const getDefaultModelForMode = (apiMode: AppSettings['apiMode']) =>
-    apiMode === 'responses' ? DEFAULT_RESPONSES_MODEL : DEFAULT_IMAGES_MODEL
-
   const enabledZipDownloadRouteCount = ZIP_DOWNLOAD_ROUTE_OPTIONS
     .filter((option) => draft.zipDownloadRoutes.includes(option.route))
     .length
@@ -410,21 +406,6 @@ export default function SettingsModal() {
   const zipDownloadRouteSummary = enabledZipDownloadRouteCount
     ? `已开启 ${enabledZipDownloadRouteCount} 项使用压缩包进行批量下载的途径`
     : '未开启任何使用压缩包进行批量下载的途径'
-
-  const agentTextProfiles = draft.profiles.filter(isAgentTextApiProfile)
-  const selectedAgentTextProfile = agentTextProfiles.find((profile) => profile.id === draft.agentTextProfileId)
-    ?? (isAgentTextApiProfile(activeProfile) ? activeProfile : agentTextProfiles[0])
-    ?? null
-  const selectedAgentImageProfile = draft.profiles.find((profile) => profile.id === draft.agentImageProfileId)
-    ?? activeProfile
-  const agentTextProfileOptions = agentTextProfiles.map((profile) => ({
-    label: `${profile.name} · ${profile.model || DEFAULT_RESPONSES_MODEL}`,
-    value: profile.id,
-  }))
-  const agentImageProfileOptions = draft.profiles.map((profile) => ({
-    label: `${profile.name} · ${getApiProviderLabel(draft, profile.provider)} · ${profile.model}`,
-    value: profile.id,
-  }))
 
   const wasSettingsOpenRef = useRef(false)
 
@@ -545,7 +526,11 @@ export default function SettingsModal() {
       const normalizedBaseUrl = profile.provider === 'fal'
         ? profile.baseUrl.trim().replace(/\/+$/, '') || DEFAULT_FAL_BASE_URL
         : shouldKeepEmptyBaseUrl ? '' : normalizeBaseUrl(profile.baseUrl.trim() || DEFAULT_SETTINGS.baseUrl)
-      const defaultModel = profile.provider === 'fal' ? DEFAULT_FAL_MODEL : getDefaultModelForMode(profile.apiMode)
+      const defaultModel = profile.provider === 'fal'
+        ? DEFAULT_FAL_MODEL
+        : profile.provider === 'openai'
+        ? DEFAULT_RESPONSES_MODEL
+        : DEFAULT_IMAGES_MODEL
       return {
         ...profile,
         name: profile.name.trim() || (profile.id === DEFAULT_OPENAI_PROFILE_ID ? '默认' : '新配置'),
@@ -598,8 +583,7 @@ export default function SettingsModal() {
       } else if (!options.includeApiKey && options.useNewApiKey) {
         url.searchParams.set('apiKey', '{key}')
       }
-      url.searchParams.set('apiMode', profile.apiMode)
-      const model = profile.model.trim() || getDefaultModelForMode(profile.apiMode)
+      const model = profile.model.trim() || DEFAULT_RESPONSES_MODEL
       url.searchParams.set('model', !options.includeApiKey && options.useNewApiModel ? '{model}' : model)
       if (profile.name.trim()) url.searchParams.set('profileName', profile.name.trim())
       if (profile.codexCli) url.searchParams.set('codexCli', 'true')
@@ -786,15 +770,6 @@ export default function SettingsModal() {
     })
     commitSettings(nextDraft)
     setShowProfileMenu(false)
-  }
-
-  const updateAgentApiConfigMode = (mode: AgentApiConfigMode) => {
-    commitSettings({
-      ...draft,
-      agentApiConfigMode: mode,
-      agentTextProfileId: mode !== 'off' ? selectedAgentTextProfile?.id ?? draft.agentTextProfileId : draft.agentTextProfileId,
-      agentImageProfileId: mode === 'hybrid' ? selectedAgentImageProfile?.id ?? draft.agentImageProfileId : draft.agentImageProfileId,
-    })
   }
 
   const duplicateActiveProfile = () => {
@@ -1254,12 +1229,7 @@ export default function SettingsModal() {
               <AgentSettingsTab
                 draft={draft}
                 agentMaxToolRoundsInput={agentMaxToolRoundsInput}
-                agentTextProfileOptions={agentTextProfileOptions}
-                agentImageProfileOptions={agentImageProfileOptions}
-                selectedAgentTextProfile={selectedAgentTextProfile}
-                selectedAgentImageProfile={selectedAgentImageProfile}
                 setAgentMaxToolRoundsInput={setAgentMaxToolRoundsInput}
-                updateAgentApiConfigMode={updateAgentApiConfigMode}
                 commitSettings={commitSettings}
                 commitAgentMaxToolRounds={commitAgentMaxToolRounds}
               />
@@ -1565,43 +1535,17 @@ export default function SettingsModal() {
                 </div>
               </div>
 
-              {/* 6. API 接口（Images/Responses） */}
-              {activeProfile.provider === 'openai' && (
-                <div className="block">
-                  <span className="mb-1.5 block text-sm text-gray-600 dark:text-gray-300">API 接口</span>
-                  <Select
-                    value={activeProfile.apiMode ?? DEFAULT_SETTINGS.apiMode}
-                    onChange={(value) => {
-                      const apiMode = value as AppSettings['apiMode']
-                      const nextModel =
-                        activeProfile.model === DEFAULT_IMAGES_MODEL || activeProfile.model === DEFAULT_RESPONSES_MODEL
-                          ? getDefaultModelForMode(apiMode)
-                          : activeProfile.model
-                      updateActiveProfile({ apiMode, model: nextModel }, true)
-                    }}
-                    options={[
-                      { label: 'Images API (/v1/images)', value: 'images' },
-                      { label: 'Responses API (/v1/responses)', value: 'responses' },
-                    ]}
-                    className="w-full rounded-xl border border-gray-200/70 bg-white/60 px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-blue-300 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-gray-200 dark:focus:border-blue-500/50"
-                  />
-                  <div data-selectable-text className="mt-1.5 text-xs text-gray-500 dark:text-gray-500">
-                    支持通过查询参数覆盖：<code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">apiMode=images</code> 或 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">apiMode=responses</code>。
-                  </div>
-                </div>
-              )}
-
-              {/* 7. 模型 ID（紧跟接口选择） */}
+              {/* 6. 模型 ID */}
               <label className="block">
                 <span className="mb-1.5 block text-sm text-gray-600 dark:text-gray-300">
-                  模型 ID
+                  {activeProfile.provider === 'openai' ? '对话模型 ID' : '模型 ID'}
                 </span>
                 <input
                   value={activeProfile.model}
                   onChange={(e) => updateActiveProfile({ model: e.target.value })}
                   onBlur={(e) => commitActiveProfilePatch({ model: e.target.value })}
                   type="text"
-                  placeholder={activeProfile.provider === 'fal' ? DEFAULT_FAL_MODEL : getDefaultModelForMode(activeProfile.apiMode ?? DEFAULT_SETTINGS.apiMode)}
+                  placeholder={activeProfile.provider === 'fal' ? DEFAULT_FAL_MODEL : activeProfile.provider === 'openai' ? DEFAULT_RESPONSES_MODEL : DEFAULT_IMAGES_MODEL}
                   className="w-full rounded-xl border border-gray-200/70 bg-white/60 px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-blue-300 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-gray-200 dark:focus:border-blue-500/50"
                 />
                 <div data-selectable-text className="mt-1.5 text-xs text-gray-500 dark:text-gray-500">
@@ -1609,10 +1553,8 @@ export default function SettingsModal() {
                     <>当前适配 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_FAL_MODEL}</code>。</>
                   ) : activeCustomProvider ? (
                     <>当前使用 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{activeCustomProvider.name}</code>。</>
-                  ) : (activeProfile.apiMode ?? DEFAULT_SETTINGS.apiMode) === 'responses' ? (
-                    <>Responses API 需要使用支持 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">image_generation</code> 工具的文本模型，例如 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_RESPONSES_MODEL}</code>。</>
                   ) : (
-                    <>Images API 需要使用 GPT Image 模型，例如 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_IMAGES_MODEL}</code>。</>
+                    <>Agent 对话使用该模型，例如 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_RESPONSES_MODEL}</code>；画廊和 Agent 图片工具会自动使用 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_IMAGES_MODEL}</code>。</>
                   )}
                   {activeProfile.provider === 'openai' && (
                     <>支持通过查询参数覆盖：<code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">?model=</code>。</>

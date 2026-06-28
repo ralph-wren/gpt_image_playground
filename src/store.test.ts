@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { strToU8, zipSync } from 'fflate'
 import { DEFAULT_PARAMS } from './types'
-import { createDefaultFalProfile, createDefaultOpenAIProfile, DEFAULT_RESPONSES_MODEL, DEFAULT_SETTINGS, normalizeSettings } from './lib/apiProfiles'
+import { createDefaultFalProfile, createDefaultOpenAIProfile, DEFAULT_IMAGES_MODEL, DEFAULT_RESPONSES_MODEL, DEFAULT_SETTINGS, normalizeSettings } from './lib/apiProfiles'
 import type { AgentConversation, ExportData, StoredImage, StoredImageThumbnail, TaskRecord } from './types'
 import { getSelectedImageMentionLabel } from './lib/promptImageMentions'
 vi.mock('./lib/db', () => {
@@ -129,12 +129,22 @@ vi.mock('./lib/agentApi', () => ({
 }))
 import { clearAgentConversations, clearImages, clearTasks, getAllAgentConversations, getAllTasks, getImage, putAgentConversation, putImage, putTask as putDbTask } from './lib/db'
 import { callAgentResponsesApi, callBatchImageSingle } from './lib/agentApi'
+import { callImageApi } from './lib/api'
 import { getFalQueuedImageResult } from './lib/falAiImageApi'
 import { removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
 import { cleanStaleAgentInputDrafts, clearFailedTasks, deleteAgentRoundFromConversation, deleteFavoriteCollection, editOutputs, getActiveAgentRounds, getErrorToastMessage, getPersistedState, getTaskApiProfile, importData, initStore, markInterruptedOpenAIRunningTasks, migratePersistedState, regenerateAgentAssistantMessage, remapAgentRoundMentionsForPathChange, removeTask, reuseConfig, submitAgentMessage, submitTask, taskMatchesFilterStatus, taskMatchesSearchQuery, useStore } from './store'
 
 const imageA = { id: 'image-a', dataUrl: 'data:image/png;base64,a' }
 const imageB = { id: 'image-b', dataUrl: 'data:image/png;base64,b' }
+
+async function waitForAgentIdle(maxTicks = 30) {
+  for (let i = 0; i < maxTicks; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const hasRunningRound = useStore.getState().agentConversations
+      .some((conversation) => conversation.rounds.some((round) => round.status === 'running'))
+    if (!hasRunningRound) return
+  }
+}
 
 describe('error toast messages', () => {
   it('drops long error detail after the failure title', () => {
@@ -1922,11 +1932,20 @@ describe('agent batch reference resolution', () => {
   })
 
   beforeEach(async () => {
+    await waitForAgentIdle()
     await clearImages()
     await putImage(imageA)
     await putImage(imageB)
-    vi.mocked(callAgentResponsesApi).mockClear()
+    vi.mocked(callAgentResponsesApi).mockReset()
+    vi.mocked(callAgentResponsesApi).mockImplementation(() => new Promise(() => {}))
     vi.mocked(callBatchImageSingle).mockClear()
+    vi.mocked(callImageApi).mockReset()
+    vi.mocked(callImageApi).mockResolvedValue({
+      images: ['data:image/png;base64,agent-batch-output'],
+      actualParams: {},
+      actualParamsList: [{}],
+      revisedPrompts: [],
+    })
     useStore.setState({
       settings: normalizeSettings({
         ...DEFAULT_SETTINGS,
@@ -2007,6 +2026,10 @@ describe('agent batch reference resolution', () => {
     })
   })
 
+  afterEach(async () => {
+    await waitForAgentIdle()
+  })
+
   it('resolves batch references from the active branch path only', async () => {
     vi.mocked(callAgentResponsesApi)
       .mockResolvedValueOnce({
@@ -2034,14 +2057,16 @@ describe('agent batch reference resolution', () => {
 
     await submitAgentMessage()
 
-    for (let i = 0; i < 5 && vi.mocked(callBatchImageSingle).mock.calls.length === 0; i++) {
+    for (let i = 0; i < 5 && vi.mocked(callImageApi).mock.calls.length === 0; i++) {
       await new Promise((resolve) => setTimeout(resolve, 0))
     }
-    expect(callBatchImageSingle).toHaveBeenCalled()
-    const batchArgs = vi.mocked(callBatchImageSingle).mock.calls[0][0]
-    expect(batchArgs.referenceImageDataUrls).toEqual([imageB.dataUrl])
-    expect(batchArgs.referenceImageDataUrls).not.toContain(imageA.dataUrl)
-    expect(batchArgs.referenceIds).toEqual(['round-2-image-1'])
+    expect(callImageApi).toHaveBeenCalled()
+    const batchArgs = vi.mocked(callImageApi).mock.calls[0][0]
+    expect(batchArgs.inputImageDataUrls).toEqual([imageB.dataUrl])
+    expect(batchArgs.inputImageDataUrls).not.toContain(imageA.dataUrl)
+    expect(batchArgs.settings.apiMode).toBe('images')
+    expect(batchArgs.settings.model).toBe(DEFAULT_IMAGES_MODEL)
+    await waitForAgentIdle()
   })
 
   it('resolves batch references to current round input images', async () => {
@@ -2072,13 +2097,15 @@ describe('agent batch reference resolution', () => {
 
     await submitAgentMessage()
 
-    for (let i = 0; i < 5 && vi.mocked(callBatchImageSingle).mock.calls.length === 0; i++) {
+    for (let i = 0; i < 5 && vi.mocked(callImageApi).mock.calls.length === 0; i++) {
       await new Promise((resolve) => setTimeout(resolve, 0))
     }
-    expect(callBatchImageSingle).toHaveBeenCalled()
-    const batchArgs = vi.mocked(callBatchImageSingle).mock.calls[0][0]
-    expect(batchArgs.referenceImageDataUrls).toEqual([imageA.dataUrl])
-    expect(batchArgs.referenceIds).toEqual(['round-3-reference-1'])
+    expect(callImageApi).toHaveBeenCalled()
+    const batchArgs = vi.mocked(callImageApi).mock.calls[0][0]
+    expect(batchArgs.inputImageDataUrls).toEqual([imageA.dataUrl])
+    expect(batchArgs.settings.apiMode).toBe('images')
+    expect(batchArgs.settings.model).toBe(DEFAULT_IMAGES_MODEL)
+    await waitForAgentIdle()
   })
 })
 
