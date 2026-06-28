@@ -10,6 +10,13 @@ const MIME_EXTENSIONS: Record<string, string> = {
   'image/gif': 'gif',
 }
 
+const IMAGE_SIGNATURE_EXTENSIONS: Array<{ ext: string; bytes: number[] }> = [
+  { ext: 'png', bytes: [0x89, 0x50, 0x4e, 0x47] },
+  { ext: 'jpg', bytes: [0xff, 0xd8, 0xff] },
+  { ext: 'gif', bytes: [0x47, 0x49, 0x46, 0x38] },
+  { ext: 'webp', bytes: [0x52, 0x49, 0x46, 0x46] },
+]
+
 export interface DownloadImagesResult {
   successCount: number
   failCount: number
@@ -34,10 +41,11 @@ export async function downloadImageIds(imageIds: string[], fileNameBase = 'image
   for (let index = 0; index < imageIds.length; index++) {
     try {
       const blob = await getImageBlob(imageIds[index])
+      const ext = await getBlobExtension(blob)
       const order = String(index + 1).padStart(2, '0')
       const fileName = multiple
-        ? `${fileNameBase}-${order}.${getBlobExtension(blob)}`
-        : `${fileNameBase}.${getBlobExtension(blob)}`
+        ? `${fileNameBase}-${order}.${ext}`
+        : `${fileNameBase}.${ext}`
       triggerDownload(blob, fileName)
       successCount++
       if (multiple) await delay(100)
@@ -64,7 +72,7 @@ export async function downloadImageEntriesAsZip(entries: DownloadImageZipEntry[]
       const blob = await getImageBlob(entry.imageId)
       const order = String(index + 1).padStart(2, '0')
       const base = sanitizeFileNamePart(entry.fileNameBase || `image-${order}`) || `image-${order}`
-      const ext = getBlobExtension(blob)
+      const ext = await getBlobExtension(blob)
       let fileName = `${base}.${ext}`
       let duplicateIndex = 2
       while (usedNames.has(fileName)) {
@@ -124,8 +132,19 @@ function triggerDownload(blob: Blob, fileName: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
-function getBlobExtension(blob: Blob): string {
-  return MIME_EXTENSIONS[blob.type.toLowerCase()] ?? blob.type.split('/')[1] ?? 'png'
+export async function getBlobExtension(blob: Blob): Promise<string> {
+  const mimeExt = MIME_EXTENSIONS[blob.type.toLowerCase()]
+  if (mimeExt) return mimeExt
+
+  const bytes = new Uint8Array(await blob.slice(0, 12).arrayBuffer())
+  const signature = IMAGE_SIGNATURE_EXTENSIONS.find((item) =>
+    item.bytes.every((byte, index) => bytes[index] === byte),
+  )
+  if (signature?.ext === 'webp') {
+    const isWebp = bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+    if (!isWebp) return 'png'
+  }
+  return signature?.ext ?? 'png'
 }
 
 function delay(ms: number) {
